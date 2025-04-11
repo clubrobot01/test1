@@ -1,81 +1,33 @@
 #!/bin/bash
 
-# Install required packages
-apt update
-apt install -y nginx python3 python3-pip cron sudo
+# Redirige les fichiers d'historique vers /dev/null
+echo "Redirigeons l'historique des commandes vers /dev/null"
 
-# Create vulnerable Flask app directory
-mkdir -p /opt/vault-lite
-cat << EOF > /opt/vault-lite/app.py
-from flask import Flask, request, jsonify
-import subprocess
+# Liste des fichiers d'historique à prendre en compte
+files_to_redirect=(
+  "/root/.bash_history"
+  "/home/webvault/.bash_history"
+  "/home/webvault/.mysql_history"
+  "/home/webvault/.viminfo"
+)
 
-app = Flask(__name__)
+# Rediriger chaque fichier d'historique vers /dev/null
+for file in "${files_to_redirect[@]}"; do
+  if [ -f "$file" ]; then
+    echo "Rediriger $file vers /dev/null"
+    echo "" > "$file"
+    chown root:root "$file"
+    chmod 600 "$file"
+  fi
+done
 
-@app.route("/api/test", methods=["POST"])
-def test():
-    data = request.get_json()
-    cmd = data.get("cmd")
-    try:
-        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-        return jsonify({"output": output.decode()})
-    except subprocess.CalledProcessError as e:
-        return jsonify({"error": e.output.decode()}), 400
+# Assurer l'immuabilité des fichiers d'historique
+echo "Assurer que les fichiers sont immuables"
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-EOF
+for file in "${files_to_redirect[@]}"; do
+  if [ -f "$file" ]; then
+    chattr +i "$file"
+  fi
+done
 
-# Install Flask
-pip3 install flask
-
-# Create systemd service for the Flask app
-cat << EOF > /etc/systemd/system/vault-lite.service
-[Unit]
-Description=Vault Lite Flask API
-After=network.target
-
-[Service]
-User=webvault
-WorkingDirectory=/opt/vault-lite
-ExecStart=/usr/bin/python3 /opt/vault-lite/app.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start the service
-systemctl daemon-reexec
-systemctl daemon-reload
-systemctl enable vault-lite
-systemctl start vault-lite
-
-# Setup backup script
-mkdir -p /backup
-mkdir -p /opt/scripts
-cat << EOF > /opt/scripts/backup.sh
-#!/bin/bash
-tar -czf /backup/$(date +%F).tar.gz \$BACKUP_DIR
-EOF
-chmod +x /opt/scripts/backup.sh
-
-# Add cron job
-echo "*/5 * * * * root /opt/scripts/backup.sh" >> /etc/crontab
-
-# Add sudoers rule
-echo "webvault ALL=(ALL) NOPASSWD: /bin/tar" > /etc/sudoers.d/webvault
-chmod 440 /etc/sudoers.d/webvault
-
-# Generate MD5 hashes of the passwords
-user_flag=$(echo -n "WebVaultUSER01!" | md5sum | awk '{print $1}')
-root_flag=$(echo -n "WebVault01!" | md5sum | awk '{print $1}')
-
-# Create the user flag (MD5 of user password)
-echo "$user_flag" > /home/webvault/user.txt
-chown webvault:webvault /home/webvault/user.txt
-chmod 600 /home/webvault/user.txt
-
-# Create the root flag (MD5 of root password)
-echo "$root_flag" > /root/root.txt
-chmod 600 /root/root.txt
+echo "Historique redirigé et sécurisé. Les fichiers sont maintenant immuables."
