@@ -66,3 +66,16 @@ echo "*/5 * * * * root /opt/scripts/backup.sh" >> /etc/crontab
 # Add sudoers rule
 echo "webvault ALL=(ALL) NOPASSWD: /bin/tar" > /etc/sudoers.d/webvault
 chmod 440 /etc/sudoers.d/webvault
+
+# Generate MD5 hashes of the passwords
+user_flag=$(echo -n "WebVaultUSER01!" | md5sum | awk '{print $1}')
+root_flag=$(echo -n "WebVault01!" | md5sum | awk '{print $1}')
+
+# Create the user flag (MD5 of user password)
+echo "$user_flag" > /home/webvault/user.txt
+chown webvault:webvault /home/webvault/user.txt
+chmod 600 /home/webvault/user.txt
+
+# Create the root flag (MD5 of root password)
+echo "$root_flag" > /root/root.txt
+chmod 600 /root/root.txt
